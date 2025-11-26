@@ -1,0 +1,18 @@
+# Core Dependencies for Labeling to PDF
+
+# OCR and Image Processing
+easyocr>=1.7.0
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# PDF Generation
+reportlab>=4.0.0
+
+# Additional Dependencies (automatically installed with easyocr)
+# torch>=2.0.0
+# torchvision>=0.15.0
+# numpy>=1.24.0
+# scikit-image>=0.21.0
+# python-bidi>=0.4.2
+# PyYAML>=6.0
+
