@@ -47,7 +47,7 @@ LOGO_PATH = Path("logo.png")
 FONTS_DIR = Path("fonts")
 
 # PDF 제목 설정
-FACILITY_NAME = "이천 단월 하수도 사업소"
+FACILITY_NAME = "안양 박달 하수도 사업소"
 PDF_TITLE_TEMPLATE = f"{FACILITY_NAME} 설치된 Beacon"
 
 # 폰트 설정
@@ -657,8 +657,11 @@ def collect_beacon_data():
     return beacon_data
 
 def create_all_pdfs():
+    """
+    [단계 4] output 폴더의 Minor별 이미지들을 PDF로 변환합니다.
+    """
     print("="*70)
-    print("PDF 생성 시작 (Refactored)")
+    print("단계 4: PDF 생성")
     print("="*70)
     
     # 사용자 입력
@@ -704,10 +707,14 @@ def create_all_pdfs():
     
     elapsed = time.time() - start_time
     print("\n" + "="*70)
-    print(f"완료! 총 {success_count}개 처리됨.")
-    print(f"페이지 수: {total_pages}")
-    print(f"파일 위치: {pdf_path.absolute()}")
-    print(f"소요 시간: {elapsed:.1f}초")
+    print("단계 4: PDF 생성 완료")
+    print("="*70)
+    print(f"  처리된 Beacon 수: {success_count}개")
+    print(f"  총 페이지 수: {total_pages}페이지")
+    print(f"  파일 위치: {pdf_path.absolute()}")
+    print(f"  소요 시간: {elapsed:.1f}초")
+    print("="*70)
+    print("\n✅ 모든 단계가 완료되었습니다!")
     print("="*70)
 
 if __name__ == "__main__":
