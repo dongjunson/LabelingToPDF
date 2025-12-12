@@ -411,7 +411,7 @@ class PDFLayoutManager:
             
         return self.BEACON_TITLE_HEIGHT + image_area_height + (self.BOX_PADDING * 2)
 
-    def _draw_beacon_box_content(self, beacon_number, image_files, box_x, box_y_top, box_width, fixed_height=None):
+    def _draw_beacon_box_content(self, beacon_number, image_files, box_x, box_y_top, box_width, fixed_height=None, is_방폭=False):
         """실제 비콘 박스 그리기 로직"""
         c = self.c
         num_images = len(image_files)
@@ -468,7 +468,12 @@ class PDFLayoutManager:
         except:
             c.setFont("Helvetica-Bold", 7)
         c.setFillColor(black)
-        c.drawString(box_x + self.BOX_PADDING, box_y_top - self.BOX_PADDING - 2*mm, f"Beacon {beacon_number}")
+        # 방폭비콘인 경우 "방폭비콘 Beacon {번호}" 형식으로 표시
+        if is_방폭:
+            title_text = f"방폭비콘 Beacon {beacon_number}"
+        else:
+            title_text = f"Beacon {beacon_number}"
+        c.drawString(box_x + self.BOX_PADDING, box_y_top - self.BOX_PADDING - 2*mm, title_text)
         
         # Images
         if num_images > 0:
@@ -504,6 +509,7 @@ class PDFLayoutManager:
         """비콘 하나를 레이아웃에 배치"""
         beacon_number = beacon_info['number']
         image_files = beacon_info['images']
+        is_방폭 = beacon_info.get('is_방폭', False)
         num_images = len(image_files)
         is_full_width = (num_images == 4)
         
@@ -534,7 +540,7 @@ class PDFLayoutManager:
             box_y = min(self.col_y_positions)
             height = self._draw_beacon_box_content(
                 beacon_number, image_files, 
-                MARGIN, box_y, CONTENT_WIDTH
+                MARGIN, box_y, CONTENT_WIDTH, is_방폭=is_방폭
             )
             
             # 상태 업데이트
@@ -570,7 +576,7 @@ class PDFLayoutManager:
             box_x = MARGIN + self.current_col * (self.BEACON_BOX_WIDTH + self.BEACON_COLUMN_MARGIN)
             height = self._draw_beacon_box_content(
                 beacon_number, image_files,
-                box_x, box_y, self.BEACON_BOX_WIDTH
+                box_x, box_y, self.BEACON_BOX_WIDTH, is_방폭=is_방폭
             )
             
             if self.current_col == 0:
@@ -588,16 +594,17 @@ class PDFLayoutManager:
                 # 높이가 다르면 다시 그리기
                 if self.left_beacon_data and max_h > self.left_beacon_box_info['height']:
                     # 왼쪽 다시 그리기
+                    left_is_방폭 = self.left_beacon_data.get('is_방폭', False)
                     self._draw_beacon_box_content(
                         self.left_beacon_data['number'], self.left_beacon_data['images'],
                         self.left_beacon_box_info['x'], self.left_beacon_box_info['y'],
-                        self.BEACON_BOX_WIDTH, fixed_height=max_h
+                        self.BEACON_BOX_WIDTH, fixed_height=max_h, is_방폭=left_is_방폭
                     )
                 if max_h > height:
                     # 오른쪽 다시 그리기
                     self._draw_beacon_box_content(
                         beacon_number, image_files,
-                        box_x, box_y, self.BEACON_BOX_WIDTH, fixed_height=max_h
+                        box_x, box_y, self.BEACON_BOX_WIDTH, fixed_height=max_h, is_방폭=is_방폭
                     )
                 
                 # 상태 업데이트
@@ -626,19 +633,42 @@ class PDFLayoutManager:
 # 메인 로직
 # ============================================================================
 
-def collect_beacon_data():
-    """Minor 폴더에서 비콘 데이터 수집"""
-    minor_folders = sorted([f for f in OUTPUT_DIR.iterdir() if f.is_dir() and f.name.startswith('Minor_')])
+def collect_beacon_data_by_minor():
+    """Minor 폴더별로 비콘 데이터 수집 (폴더별 그룹화)"""
+    import os
+    import unicodedata
+    
+    # glob을 사용하여 폴더 찾기
+    minor_folders = []
+    
+    # Minor_로 시작하는 폴더 찾기
+    minor_folders.extend([f for f in OUTPUT_DIR.glob('Minor_*') if f.is_dir()])
+    
+    # *Minor_* 패턴으로 모든 Minor 폴더 찾기 (방폭비콘_Minor 포함)
+    all_minor_folders = [f for f in OUTPUT_DIR.glob('*Minor_*') if f.is_dir()]
+    
+    # 방폭비콘_Minor 폴더 찾기 (조합형/완성형 모두 인식)
+    for folder in all_minor_folders:
+        folder_name = folder.name
+        # 완성형 또는 조합형으로 '방폭비콘'이 포함되어 있는지 확인
+        # 정규화하여 비교
+        normalized_name = unicodedata.normalize('NFC', folder_name)
+        if '방폭비콘' in normalized_name or '방폭비콘' in folder_name:
+            if folder not in minor_folders:
+                minor_folders.append(folder)
+    
+    minor_folders = sorted(minor_folders, key=lambda x: x.name)
     
     if not minor_folders:
         print("❌ Minor 폴더를 찾을 수 없습니다.")
-        return []
+        return {}
         
-    beacon_data = []
+    minor_data = {}
     image_extensions = {'.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG'}
     
     for folder in minor_folders:
-        b_num = get_beacon_number(folder.name)
+        minor_name = folder.name  # Minor_0001 또는 방폭비콘_Minor_0001 형식
+        b_num = get_beacon_number(minor_name)
         if b_num is None: continue
         
         images = [f for f in folder.iterdir() if f.is_file() and f.suffix in image_extensions]
@@ -652,9 +682,48 @@ def collect_beacon_data():
         images.sort(key=sort_key)
         
         if images:
-            beacon_data.append({'number': b_num, 'images': images})
+            if minor_name not in minor_data:
+                minor_data[minor_name] = []
+            # 방폭비콘 여부 확인
+            is_방폭 = '방폭' in minor_name or '방' in minor_name
+            minor_data[minor_name].append({
+                'number': b_num, 
+                'images': images,
+                'is_방폭': is_방폭,
+                'folder_name': minor_name
+            })
             
-    return beacon_data
+    return minor_data
+
+def collect_beacon_data():
+    """모든 비콘 데이터를 리스트로 수집"""
+    import unicodedata
+    
+    minor_data = collect_beacon_data_by_minor()
+    beacon_list = []
+    
+    # 일반 Minor 폴더와 방폭비콘_Minor 폴더를 분리
+    일반_minor = []
+    방폭_minor = []
+    
+    for minor_name in minor_data.keys():
+        # 정규화하여 비교 (조합형/완성형 모두 처리)
+        normalized_name = unicodedata.normalize('NFC', minor_name)
+        if minor_name.startswith('Minor_') and '방폭' not in normalized_name and '방' not in minor_name:
+            일반_minor.append(minor_name)
+        elif '방폭' in normalized_name or '방' in minor_name:
+            방폭_minor.append(minor_name)
+    
+    # 각각 Beacon 번호로 정렬
+    일반_minor.sort(key=lambda x: get_beacon_number(x) or 0)
+    방폭_minor.sort(key=lambda x: get_beacon_number(x) or 0)
+    
+    # 일반 Minor 먼저, 그 다음 방폭비콘_Minor 순서로 추가
+    for minor_name in 일반_minor + 방폭_minor:
+        for beacon_info in minor_data[minor_name]:
+            beacon_list.append(beacon_info)
+    
+    return beacon_list
 
 def create_all_pdfs():
     """
